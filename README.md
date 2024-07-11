@@ -65,7 +65,12 @@ Below are some usefull URLs
 https://xtream-ui.org/api-xtreamui-xtreamcode/
 
 
+## Build
+python -m pip install pip-tools bumpver build twine wh
 
-
+pip-compile pyproject.toml --verbose
+python -m build
+twine check dist/*
+twine upload dist/*
 
 

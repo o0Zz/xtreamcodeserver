@@ -1,0 +1,52 @@
+[build-system]
+requires      = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xtreamcodeserver"
+version = "1.0.0"
+description = "XTreamCode server and library"
+readme = "README.md"
+authors = [{ name = "o0Zz", email = "--@gmail.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["xtream", "iptv", "server", "xtreamcodeserver", "xtreamcode"]
+dependencies = [
+    "requests >= 1.0.0",
+]
+requires-python = ">=3.6"
+
+[project.optional-dependencies]
+dev = ["pip-tools", "pytest"]
+
+[project.urls]
+Homepage = "https://github.com/o0Zz/xtreamcodeserver"
+
+[project.scripts]
+realpython = "xtreamcodeserver.__main__:main"
+
+[tool.bumpver]
+current_version = "1.0.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump version {old_version} -> {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+]
+"README.md" = [
+    "{version}",
+    "{pep440_version}",
+]
+

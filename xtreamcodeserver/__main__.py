@@ -66,7 +66,7 @@ def browse_folder(path, type):
 
 # -------------------------------------------------------
 
-if __name__ == '__main__':
+def main():
     logging.basicConfig(level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
@@ -118,3 +118,6 @@ if __name__ == '__main__':
 
     server_xtreamcode.stop()
     _LOGGER.info('Stopped XTreamCode http server')
+    
+if __name__ == '__main__':
+    main()
