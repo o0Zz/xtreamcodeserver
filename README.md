@@ -1,6 +1,8 @@
 # XTreamCode Server
 This library allow to expose medias over XTreamCode API
+
 It can be used to create application on top of XTreamCode API
+
 Typically, create a media server that can be read by any player on your SmartTV
 
 ## Application compatible
@@ -63,14 +65,3 @@ Below are some usefull URLs
   
 ## Documentation
 https://xtream-ui.org/api-xtreamui-xtreamcode/
-
-
-## Build
-python -m pip install pip-tools bumpver build twine wh
-
-pip-compile pyproject.toml --verbose
-python -m build
-twine check dist/*
-twine upload dist/*
-
-
