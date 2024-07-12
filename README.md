@@ -1,25 +1,39 @@
 # XTreamCode Server
-This library allow to expose medias over XTreamCode API
+XTreamCodeServer is a simple API to expose media over XTreamCode API
 
-It can be used to create application on top of XTreamCode API
+```
+import xtreamcodeserver
 
-Typically, create a media server that can be read by any player on your SmartTV
+#Create credentials test/test
+credentials_provider = XTreamCodeCredentialsMemoryProvider()
+credentials_provider.add_or_update_credentials(XTreamCodeCredentials("test", "test"))
 
-## Application compatible
-All application compatible with XTreamCode protocol can work with this library.
-It has been tested with SetIPTV (Samsung TV) and IPTV Smarters (Android).
+#Add MyMovie.mkv to CategoryName
+entry_provider = XTreamCodeEntryMemoryProvider()
+category1 = XTreamCodeCategory(name="CategoryName", category_type=XTreamCodeType.VOD)
+category1.add_entry(XTreamCodeVod(name="MyMovie", extension=".mkv", stream=XTreamCodeFileSystemStream("./MyMovie.mkv"), description="This is the description for MyMovie"))
+entry_provider.add_category(category1)
+
+#Start server
+server_xtreamcode = XTreamCodeServer(entry_provider, None, credentials_provider)
+server_xtreamcode.setup("0.0.0.0", 8081, "http://127.0.0.1")
+server_xtreamcode.start()
+```
+
+## Compatibility
+This library has been tested with various applications (Box, TV, FireStick, ....)
 
 ## Quick start
 You can test it by streaming your local media with below line
 
 `python -m xtreamcodeserver -vod /my/media/path -serie /my/media/serie`
 
-This command line will expose on your network your medias: mkv, avi, mp4.
+This command line will search for "mkv, avi, mp4" movies and expose them on your network.
 
-Default credentials: username=test&password=test
-Default port: 8081
+- Credentials: username=test&password=test
+- Port: 8081
 
-For more option refer you to help
+For more option refer you to the help
 
 `python -m xtreamcodeserver -h`
 
@@ -55,6 +69,7 @@ http://127.0.0.1:8081/player_api.php?username=test&password=test&action=get_simp
 http://127.0.0.1:8081/live/test/test/1594066936.m3u8
 http://127.0.0.1:8081/live/test/test/1594066936.ts
 ```
+Where 1594066936 is the ID of the media to stream
 
 ### Stream vod content
 ```
@@ -75,6 +90,6 @@ http://127.0.0.1:8081/get.php?u=test&p=test&filter=vod
 http://127.0.0.1:8081/get.php?u=test&p=test&filter=live
 http://127.0.0.1:8081/get.php?u=test&p=test&category_id=1111
 ```
-  
+
 ## Documentation
 https://xtream-ui.org/api-xtreamui-xtreamcode/
