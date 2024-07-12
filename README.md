@@ -2,7 +2,7 @@
 XTreamCodeServer is a simple API to expose media over XTreamCode API
 
 ```
-import xtreamcodeserver
+from xtreamcodeserver import *
 
 #Create credentials test/test
 credentials_provider = XTreamCodeCredentialsMemoryProvider()
@@ -18,6 +18,11 @@ entry_provider.add_category(category1)
 server_xtreamcode = XTreamCodeServer(entry_provider, None, credentials_provider)
 server_xtreamcode.setup("0.0.0.0", 8081, "http://127.0.0.1")
 server_xtreamcode.start()
+
+print("Server started, it will stop automatically after 10s...")
+
+time.sleep(10)
+server_xtreamcode.stop()
 ```
 
 ## Compatibility
