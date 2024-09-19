@@ -15,11 +15,12 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
         self.m_max_retry = max_retry
         self.m_resp = None
         self.m_is_live = False
+        self.m_byte_received = 0
 
     def get_uri(self) -> str:
         if self.m_resp != None:
             return self.m_resp.url
-
+        
         return self.m_uri
     
     def set_uri(self, uri: str) -> None:
@@ -48,6 +49,7 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
             req_headers[key.lower()] = value
         req_headers.pop("host", None)  # Remove original header and let requests provide the correct "host"
         
+        self.m_byte_received = 0
         self.m_req_headers = req_headers
 
         #Timeout must be bigger than 2 seconds, because the server can take a while to respond during live streaming
@@ -93,21 +95,22 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
                 # _LOGGER.debug("HTTPStream: Waiting for iteration (Chunk: %d)..." % (chunk_size))
                 ret = next(self.m_resp.iter_content(chunk_size))
                 if ret:
+                    self.m_byte_received += len(ret)
                     return ret
 
-                _LOGGER.info("HTTPStream: End of stream (Nothing received) !")
+                _LOGGER.debug(f"HTTPStream: End of stream (Bytes received: {self.m_byte_received}) !")
                 break #Normal case, end of stream
             except StopIteration:
-                _LOGGER.info("HTTPStream: End of stream !")
+                _LOGGER.debug(f"HTTPStream: End of stream (Bytes received: {self.m_byte_received}) !")
                 break  #Normal case, end of stream
             except requests.exceptions.StreamConsumedError:
-                _LOGGER.error("HTTPStream: URL stream error: '%s'" % self.m_uri)
+                _LOGGER.error(f"HTTPStream: URL stream error: '{self.m_uri}'")
             except (requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout):
-                _LOGGER.error("HTTPStream: timeout for URL: '%s'" % (self.m_uri))
+                _LOGGER.error(f"HTTPStream: timeout for URL: '{self.m_uri}'")
             except requests.exceptions.ConnectionError:
-                _LOGGER.error("HTTPStream: Connection error: '%s' (Probably caused by resp.close())" % self.m_uri)
+                _LOGGER.error(f"HTTPStream: Connection error: '{self.m_uri}' (Probably caused by resp.close())")
             except:
-                _LOGGER.exception("HTTPStream: exception for url: '%s'" % self.m_uri)
+                _LOGGER.exception(f"HTTPStream: exception for url: '{self.m_uri}'")
 
         self.close()
         return None

@@ -80,6 +80,7 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
         _LOGGER.info(f"{client_info} -> Streaming uri -> {stream.get_uri()}")
 
+        total_bytes_sent = 0
         try:
             if stream.open(self.get_path(), self.get_headers()):
                 self.send_response(stream.get_http_status_code())
@@ -88,6 +89,7 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
                 while stream.is_opened() and not stream.is_end_of_stream():
                     chunk = stream.read_chunk(chunk_size=self.m_chunk_size)
                     if chunk:
+                        total_bytes_sent += len(chunk)
                         try:
                             self.wfile.write(chunk)
                         except (ConnectionAbortedError, ConnectionResetError, IOError) as e:
@@ -97,13 +99,13 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
                             _LOGGER.exception(f"{client_info} -> Streaming exception during streaming")
                             break
 
-                if not stream.is_opened():
-                    _LOGGER.warning(f"{client_info} -> Streaming stopped (Stream closed !)")
                 if stream.is_end_of_stream():
-                    _LOGGER.info(f"{client_info} -> Streaming stopped (Stream reach end of stream !)")
+                    _LOGGER.info(f"{client_info} -> Streaming stopped - Stream reach end of stream (Bytes sent: {total_bytes_sent})")
+                elif not stream.is_opened():
+                    _LOGGER.warning(f"{client_info} -> Streaming stopped - Stream closed (Bytes sent: {total_bytes_sent})")
             else:
                 _LOGGER.error(f"{client_info} -> Unable to open stream: {stream.get_uri()} (Return 404)")
-                self.send_response(HTTPStatus.NOT_FOUND)
+                self.send_error(HTTPStatus.NOT_FOUND)
         except:
             _LOGGER.exception(f"{client_info} -> Unexpected streaming exception")
         finally:
@@ -128,24 +130,25 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
             # Check credentials for /xxxx/username/password/stream_id or get.php?username=username&password=password
             if not self.m_xtreamcode_server.is_credentials_valid(query.get("username"), query.get("password")):
-                if not (len(path_splitted) >= 3 and self.m_xtreamcode_server.is_credentials_valid(path_splitted[-3], path_splitted[-2])):
-                    return self.__send_error(HTTPStatus.UNAUTHORIZED, "Invalid username/password, inactive or expired !")
+                if not (len(path_splitted) >= 3 and self.m_xtreamcode_server.is_credentials_valid(path_splitted[0], path_splitted[1])):
+                    if not (len(path_splitted) >= 3 and self.m_xtreamcode_server.is_credentials_valid(path_splitted[1], path_splitted[2])):
+                        return self.__send_error(HTTPStatus.UNAUTHORIZED, "Invalid username/password, inactive or expired !")
 
-            if path_splitted[0] == "get.php" or path_splitted[0] == "playlist.m3u":
+            if path_splitted[-1] == "get.php" or path_splitted[-1] == "playlist.m3u":
                 m3u_str = self.m_xtreamcode_server.get_m3u(query, interface_ip).encode('utf-8')
                 self.__send_response(HTTPStatus.OK,
                                      http_headers={"Content-Disposition": "attachment; filename=\"playlist.m3u\"",
                                                    "Content-Type": "audio/x-mpegurl",
                                                    "Content-Length": len(m3u_str)}, body=m3u_str)
 
-            elif path_splitted[0] == "player_api.php":
+            elif path_splitted[-1] == "player_api.php":
                 reply = self.m_xtreamcode_server.invoke_action(query.get("action"), query)
                 if reply is None:
                     reply = self.m_xtreamcode_server.get_server_info(query, interface_ip)
 
                 self.__send_response_json(HTTPStatus.OK, reply)
 
-            elif path_splitted[0] == "xmltv.php":
+            elif path_splitted[-1] == "xmltv.php":
                 reply = self.m_xtreamcode_server.get_xmltv(query, interface_ip).encode('utf-8')
                 http_headers = dict()
                 http_headers["content-type"] = "application/xml"
@@ -155,8 +158,7 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
                 # Stream file for /proxy/username/password/<base64_url>.ts
             elif path_splitted[0] == "proxy":
-                path_wo_ext, ext = os.path.splitext(path_splitted[3])
-                self.stream( XTreamCodeHTTPStream( base64.b64decode(path_wo_ext).decode("utf-8") + ext ) )
+                self.stream( XTreamCodeHTTPStream( base64.b64decode(path_splitted[3]).decode("utf-8") + "/" + path_splitted[4] ) )
 
                 # Stream file for /xxxx/username/password/stream_id or /username/password/stream_id
             elif stream := self.m_xtreamcode_server.get_stream(int(os.path.splitext(path_splitted[-1])[0])):

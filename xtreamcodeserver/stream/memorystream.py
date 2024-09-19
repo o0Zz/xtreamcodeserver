@@ -19,6 +19,10 @@ class XTreamCodeMemoryStream(IXTreamCodeStream):
         if self.m_url is None:
             self.m_url = "memory://" + str(id(self))
 
+    def set_data(self, data: bytearray, mimetype: str) -> None:
+        self.m_data = data
+        self.m_mimetype = mimetype
+
     def get_uri(self) -> str:
         return self.m_url
     

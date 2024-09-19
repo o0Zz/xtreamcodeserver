@@ -18,10 +18,6 @@ from xtreamcodeserver.epg.epgprogram import *
 
 from xtreamcodeserver.server import *
 
-from xtreamcodeserver.providers.inmemory.credentials_provider import *
-from xtreamcodeserver.providers.inmemory.entry_provider import *
-from xtreamcodeserver.providers.inmemory.epg_provider import *
-
 from xtreamcodeserver.stream.filesystemstream import *
 from xtreamcodeserver.stream.httpredirectstream import *
 from xtreamcodeserver.stream.httpstream import *

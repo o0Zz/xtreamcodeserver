@@ -77,7 +77,7 @@ class TestStream:
         assert r.status_code == 302
         assert r.headers['Location'] == self.test_url_m3u8
 
-    def test_playlist_proxy_stream_m3u8_parsing(self):
+    def test_playlist_proxy_stream_m3u8(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
         category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(XTreamCodeMemoryStream(
 b"""
@@ -102,12 +102,62 @@ b"""
 #EXT-X-ALLOW-CACHE:YES
 #EXT-X-TARGETDURATION:12
 #EXTINF:9.640000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGUvMV8x.ts
+/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_1.ts
 #EXTINF:11.520000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGUvMV8y.ts
+/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_2.ts
 #EXTINF:9.600000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGUvMV8z.ts
+/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_3.ts
 """
+
+    def test_playlist_proxy_memorize_m3u8_redirection(self):
+        # This test is to check if the redirection is memorized by the playlist proxy stream
+        # This is useful to avoid to jump from server1 to server2 during streaming that cause playback issue
+        class XTreamCodeMemoryStreamRedirect(XTreamCodeMemoryStream):
+            def __init__(self, data, mime_type, uri):
+                super().__init__(b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1093\n#EXTINF:9.640000,\n/path/to/file/1_1094.ts\n", mime_type, uri)
+
+            def get_uri(self):
+                if self.is_opened():
+                    return "memory://redirected_url/redirected_file" #Fake a redirection
+                return super().get_uri()
+            
+        memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
+        category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
+        self.entry_provider.set_categories({1: category})
+
+        r = requests.get(self.test_url + "/live/test/test/2.m3u8")
+        assert r.status_code == 200
+        assert memory_stream.m_url == "memory://original_url/original_path.m3u8"
+
+        r = requests.get(self.test_url + "/live/test/test/2.m3u8")
+        assert r.status_code == 200
+        assert memory_stream.m_url == "memory://redirected_url/redirected_file"
+
+    def test_playlist_proxy_do_not_memorize_ts_redirection(self):
+        # This test make sure playlist proxy don't memorize url for .ts file. 
+        # .ts is only open once and should be redirected each time
+        class XTreamCodeMemoryStreamRedirect(XTreamCodeMemoryStream):
+            def __init__(self, data, mime_type, uri):
+                super().__init__(b"...", mime_type, uri)
+
+            def get_uri(self):
+                if self.is_opened():
+                    return "memory://redirected_url/redirected_file" #Fake a redirection
+                return super().get_uri()
+            
+        memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
+        category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
+        self.entry_provider.set_categories({1: category})
+
+        r = requests.get(self.test_url + "/live/test/test/2.ts")
+        assert r.status_code == 200
+        assert memory_stream.m_url == "memory://original_url/original_path.ts"
+
+        r = requests.get(self.test_url + "/live/test/test/2.ts")
+        assert r.status_code == 200
+        assert memory_stream.m_url == "memory://original_url/original_path.ts"
 
     def test_playlist_proxy_stream_download(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)

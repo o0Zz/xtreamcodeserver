@@ -15,11 +15,15 @@ _LOGGER = logging.getLogger(__name__)
 # http://127.0.0.1:8081/live/username/password/1383663399.m3u8
 
 class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
-    def __init__(self, stream: IXTreamCodeStream, override_stream_ext: bool=False):
+    def __init__(self, stream: IXTreamCodeStream, override_stream_ext: bool=False, memorize_m3u8_redirection: bool=True):
         self.m_stream = stream
         self.m_override_stream_ext = override_stream_ext
         self.m_original_uri = self.m_stream.get_uri()
         self._content = None
+        self.m_ext_x_media_sequence = 0
+        self.m_last_server_hostname = None
+        self.m_memorize_m3u8_redirection = memorize_m3u8_redirection
+        self.m_redirected_m3u8_uri = None
 
     def get_uri(self) -> str:
         return self.m_stream.get_uri()
@@ -34,9 +38,8 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         
         return self.m_stream.is_available()
 
+    #Ask player to redirect itself to 
     def open(self, http_req_path: str, http_req_headers: dict) -> bool:
-
-        # Merge the original URI with the requested path extension
         http_req_path_wo_ext, http_req_extension = os.path.splitext(http_req_path)
         original_uri_wo_ext, original_uri_extension = os.path.splitext(self.m_original_uri)
         stream_extension = original_uri_extension
@@ -44,13 +47,25 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
             stream_extension = http_req_extension
 
         self.m_stream.set_uri(original_uri_wo_ext + stream_extension)
-        
-        _LOGGER.debug(f"XTreamCode Stream Opening {self.m_stream.get_uri()}")
 
+        redirection = "None"
+        if (http_req_extension == ".m3u8") and (self.m_redirected_m3u8_uri is not None):
+            self.m_stream.set_uri(self.m_redirected_m3u8_uri)
+            redirection = self.m_redirected_m3u8_uri
+            self.m_redirected_m3u8_uri = None
+        
+        _LOGGER.debug(f"XTreamCode Stream Opening {original_uri_wo_ext + stream_extension} (Redirect: {redirection})")
+        
         ret = self.m_stream.open(http_req_path, http_req_headers)
         if (ret == True) and (http_req_extension == ".m3u8"):
             self._content = self.__proxify_m3u8(http_req_path)
-    
+            if self._content is None:
+                self.m_stream.close()
+                ret = False
+
+            if self.m_memorize_m3u8_redirection:
+                self.m_redirected_m3u8_uri = self.m_stream.get_uri()
+
         return ret
     
     def close(self) -> None:
@@ -90,33 +105,40 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         m3u8_data = self.m_stream.read_chunk(chunk_size=128*1024) #read the whole m3u8 file
         if m3u8_data is None:
             return None
-        
+
+        ext_x_media_sequence = 0
         for line in m3u8_data.splitlines():  
             str = line.decode("utf-8")
             if str == "":
                 continue
-
+            
             if str[0] == "#":
+                if str.startswith("#EXT-X-MEDIA-SEQUENCE:"):
+                    ext_x_media_sequence = int(str.split(":")[1])
                 content += str + "\n"
                 continue
 
             url_parsed = urllib.parse.urlparse(self.m_stream.get_uri())
-            path_wo_ext, ext = os.path.splitext(str)
+            path_without_filename, filename_with_ext = os.path.split(str)
 
             #http req path will look like /xxxx/user/password/xxxx.m3u8
             http_req_path_splitted = http_req_path.split('/')[1:]
             username = http_req_path_splitted[-3]
             password = http_req_path_splitted[-2]
 
-            if path_wo_ext[0] == "/":
-                full_uri =  f"{url_parsed.scheme}://{url_parsed.netloc}{path_wo_ext}"
+            if path_without_filename and path_without_filename[0] == "/":
+                full_uri =  f"{url_parsed.scheme}://{url_parsed.netloc}{path_without_filename}"
             else:
                 path = url_parsed.path.split('/')
                 path.pop()
                 path = "/".join(path)
-                full_uri =  f"{url_parsed.scheme}://{url_parsed.netloc}{path}/{path_wo_ext}"
-            #_LOGGER.debug("URI: %s" % (full_uri + ext))
+                full_uri =  f"{url_parsed.scheme}://{url_parsed.netloc}{path}/{path_without_filename}"
+            #_LOGGER.debug("URI: %s" % (full_uri + "/" + filename_with_ext))
 
-            content += "/proxy/" + username + "/" + password + "/" + base64.b64encode(full_uri.encode("utf-8")).decode("utf-8")  + ext + "\n"
+            content += "/proxy/" + username + "/" + password + "/" + base64.b64encode(full_uri.encode("utf-8")).decode("utf-8")  + "/" + filename_with_ext + "\n"
 
+        if ext_x_media_sequence < self.m_ext_x_media_sequence:
+            _LOGGER.error(f"EXT-X-MEDIA-SEQUENCE rollbacks detected ! (Server seq: {ext_x_media_sequence}, Client seq: {self.m_ext_x_media_sequence}), continue anyway ...")
+
+        self.m_ext_x_media_sequence = ext_x_media_sequence
         return content.encode("utf-8")
