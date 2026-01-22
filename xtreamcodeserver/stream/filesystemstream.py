@@ -38,7 +38,7 @@ class XTreamCodeFileSystemStream(IXTreamCodeStream):
         self.m_end_of_file = False
         self.file_fd = open(self.m_uri, "rb")
         if not self.file_fd:
-            _LOGGER.error("Unable to open file: %s" % (self.m_uri))
+            _LOGGER.error(f"Unable to open file: {self.m_uri}")
             return False
 
         self.file_fd.seek(self.m_start_offset if self.m_start_offset != None else 0)

@@ -41,7 +41,7 @@ class XTreamCodeTranscodeStream(IXTreamCodeStream, threading.Thread):
     def open(self, http_req_path, http_req_headers):
         import ffmpeg
 
-        _LOGGER.info("Stream trancoding: Opening (%s)..." %(self.m_type))
+        _LOGGER.info(f"Stream trancoding: Opening ({self.m_type})...")
 
         self.m_start_offset = HTTPUtils.get_start_offset(http_req_headers)
 

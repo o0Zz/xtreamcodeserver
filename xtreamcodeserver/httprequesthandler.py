@@ -111,6 +111,13 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
         finally:
             stream.close()
 
+    def do_OPTIONS(self):
+        http_headers = {"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type"}
+    
+        self.__send_response(HTTPStatus.OK, http_headers)
+        self.close()
+
     def do_GET(self):
         try:
             client_info = "%s:%d" % (self.client_address[0], self.client_address[1])

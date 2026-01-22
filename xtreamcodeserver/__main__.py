@@ -19,13 +19,13 @@ def browse_folder(path, type):
     category_list = {}
     serie_list = {}
 
-    _LOGGER.debug("Listing %s..." % (path))
+    _LOGGER.debug(f"Listing {path}...")
 
     try:
         for root, dirs, files in os.walk(path):
             for filename in files:
                 fullpath = os.path.join(root, filename)
-                _LOGGER.debug("Listing %s..." % (fullpath))
+                _LOGGER.debug(f"Listing {fullpath}...")
                 filename_wo_ext, extension = os.path.splitext(filename)
                 folder_name = os.path.basename(os.path.dirname(fullpath))
 

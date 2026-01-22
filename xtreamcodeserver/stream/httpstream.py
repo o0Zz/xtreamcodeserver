@@ -34,7 +34,7 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
             if next(resp.iter_content(128)):
                 stream_alive = True
             else:
-                _LOGGER.warning("'%s' is down (No data received !)" % self.m_uri)
+                _LOGGER.warning(f"'{self.m_uri}' is down (No data received !)")
 
         if resp:
             resp.close()
@@ -133,9 +133,9 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
     @staticmethod
     def __log_headers(header_type: str, headers: dict) -> None:
         if LOG_HEADERS:
-            _LOGGER.debug("******************** Headers %s ********************" % header_type)
+            _LOGGER.debug(f"******************** Headers {header_type} ********************")
             for key, value in headers.items():
-                _LOGGER.debug("%s: %s" % (key, value))
+                _LOGGER.debug(f"{key}: {value}")
             _LOGGER.debug("******************************************************")
         
     def __open(self, http_req_headers: str=None, priority: int=0, timeout_connect_read: int=2) -> requests.Response:

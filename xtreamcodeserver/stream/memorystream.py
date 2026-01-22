@@ -47,7 +47,7 @@ class XTreamCodeMemoryStream(IXTreamCodeStream):
         self.m_http_headers["content-type"] = self.m_mimetype
         self.m_http_headers["content-length"] = len(self.m_data) - self.m_offset
         self.m_http_headers["content-range"] = "bytes %d-%d/%d" % (self.m_offset, len(self.m_data) - 1, len(self.m_data))
-        self.m_http_headers["accept-ranges"] = "0-%d" % len(self.m_data)
+        self.m_http_headers["accept-ranges"] = f"0-{len(self.m_data)}"
 
         self.m_opened = True
         return True

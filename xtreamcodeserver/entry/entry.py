@@ -21,13 +21,16 @@ class XTreamCodeEntry:
         self.m_type = type
         self.m_name = name
         
+        if extra_id is None:
+            extra_id = 0
+
         if self.m_id == None:
             self.m_id = zlib.crc32(("%s/%d/%d" % (name, type, extra_id)).encode('utf-8')) & XTREAMCODE_ID_MAX_VALUE  # If the id is not provided use a crc of the crc of the name as ID to be able to have everytime the same id
         if self.m_id > XTREAMCODE_ID_MAX_VALUE:
             _LOGGER.error("Invalid entry ID (%d), ID value bigger than the maximum allowed (%d)" % (self.m_id, XTREAMCODE_ID_MAX_VALUE))
 
     def __repr__(self):
-        return "%s (%s)" % (self.m_name, self.m_type)
+        return f"{self.m_name} ({self.m_type})"
     
     def get_type(self) -> XTreamCodeType:
         return self.m_type

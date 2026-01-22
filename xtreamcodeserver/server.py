@@ -154,7 +154,7 @@ class XTreamCodeServer(threading.Thread):
             return self.m_actions[action](query)
         
         if action is not None:
-            _LOGGER.error("Unexpected action: %s" % action)
+            _LOGGER.error(f"Unexpected action: {action}")
             
         return None
 
@@ -238,7 +238,7 @@ class XTreamCodeServer(threading.Thread):
     def get_xmltv(self, query: dict, interface_ip: str) -> str:
         buffer_line = ['<?xml version="1.0" encoding="utf-8" ?>',
                        '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
-                       '<tv generator-info-name="pyXTreamCodeServer" generator-info-url="%s">' % (self.get_base_url(query, interface_ip))]
+                       f'<tv generator-info-name="pyXTreamCodeServer" generator-info-url="{self.get_base_url(query, interface_ip)}">']
 
         date_time_now = self.m_datetime_provider.utcnow()
         list_of_channel_id = []

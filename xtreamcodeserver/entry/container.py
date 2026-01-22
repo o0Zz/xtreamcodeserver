@@ -13,6 +13,9 @@ class XTreamCodeContainer(DictClass):
         self.m_type = type
         self.m_name = name
         
+        if extra_id is None:
+            extra_id = 0
+
         if self.m_id == None:
             self.m_id = zlib.crc32(("%s#%d#%d" % (name, type, extra_id)).encode('utf-8')) & XTREAMCODE_ID_MAX_VALUE  # If the id is not provided use a crc of the crc of the name as ID to be able to have everytime the same id
         if self.m_id > XTREAMCODE_ID_MAX_VALUE:
@@ -49,8 +52,8 @@ class XTreamCodeContainer(DictClass):
 
             #Make sure we add correct type to correct entry type according to categorie type
         if (item.get_type() != self.get_type()) and (item.get_type() != XTreamCodeType.EPISODE and self.get_type() != XTreamCodeType.SERIE):
-            _LOGGER.error("Error: Invalid entry type (%s) for container type (%s) (Entry name: %s)" % (item.get_type(), self.get_type(), item.get_name()))
-            raise ValueError("Invalid entry type (%s) for container (%s) (Entry: %s)" % (item.get_type(), self.get_type(), item.get_name()))
+            _LOGGER.error(f"Error: Invalid entry type ({item.get_type()}) for container type ({self.get_type()}) (Entry name: {item.get_name()})")
+            raise ValueError(f"Invalid entry type ({item.get_type()}) for container ({self.get_type()}) (Entry: {item.get_name()})")
         
         self.m_entry_list[key.get_entry_id()] = item
 
