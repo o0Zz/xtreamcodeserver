@@ -163,7 +163,13 @@ class XTreamCodeServer(threading.Thread):
     def get_stream(self, entry_id: int):
         stream_entry = self.m_entry_provider.get_entry(entry_id)
         if stream_entry is not None:
-            return stream_entry.get_stream()
+            # Entries hold a single shared stream instance, but the server is
+            # multi-threaded and a single client commonly opens several concurrent
+            # connections (probe + playback + range requests) to the same entry.
+            # Hand each request its own clone so they don't race on shared
+            # per-request state (file descriptors, offsets, ffmpeg processes).
+            stream = stream_entry.get_stream()
+            return stream.clone() if stream is not None else None
 
         return None
     

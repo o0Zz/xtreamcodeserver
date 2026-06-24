@@ -18,6 +18,9 @@ class XTreamCodeFileSystemStream(IXTreamCodeStream):
         self.m_end_of_file = False
         self.m_start_offset = None
 
+    def clone(self) -> "XTreamCodeFileSystemStream":
+        return XTreamCodeFileSystemStream(self.m_uri)
+
     def get_uri(self) -> str:
         return self.m_uri
     

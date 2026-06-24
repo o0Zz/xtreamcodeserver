@@ -9,6 +9,9 @@ class XTreamCodeHTTPRedirectStream(IXTreamCodeStream):
         self.m_uri = url
         self.m_opened = False
 
+    def clone(self) -> "XTreamCodeHTTPRedirectStream":
+        return XTreamCodeHTTPRedirectStream(self.m_uri)
+
     def get_uri(self) -> str:
         return self.m_uri
     

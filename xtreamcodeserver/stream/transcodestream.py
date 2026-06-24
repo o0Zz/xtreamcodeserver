@@ -20,6 +20,11 @@ class XTreamCodeTranscodeStream(IXTreamCodeStream, threading.Thread):
         self.m_ffmpeg_process = None
         self.m_start_offset = None
 
+    def clone(self) -> "XTreamCodeTranscodeStream":
+        # A threading.Thread can only be started once, so a fresh instance (with a
+        # cloned source stream) is mandatory for every request.
+        return XTreamCodeTranscodeStream(self.stream.clone(), self.m_type)
+
     def get_uri(self) -> str:
         return self.stream.get_uri()
     

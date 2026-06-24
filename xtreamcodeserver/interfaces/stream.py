@@ -2,7 +2,16 @@ from abc import abstractmethod
 from http import HTTPStatus
 
 class IXTreamCodeStream:
-    
+
+    @abstractmethod
+    def clone(self) -> "IXTreamCodeStream":
+        # Return a fresh, independent stream built from the same configuration.
+        # The server keeps a single stream instance per entry but is multi-threaded,
+        # so every request must operate on its own instance to avoid sharing
+        # per-request state (file descriptors, offsets, ffmpeg processes, ...)
+        # across concurrent connections.
+        raise NotImplementedError("Must be implemented by Subclasses !")
+
     @abstractmethod
     def get_uri(self) -> str:
         raise NotImplementedError("Must be implemented by Subclasses !")

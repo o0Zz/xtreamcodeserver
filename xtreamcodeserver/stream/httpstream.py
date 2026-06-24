@@ -17,6 +17,9 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
         self.m_is_live = False
         self.m_byte_received = 0
 
+    def clone(self) -> "XTreamCodeHTTPStream":
+        return XTreamCodeHTTPStream(self.m_uri, self.m_max_retry)
+
     def get_uri(self) -> str:
         if self.m_resp is not None:
             return self.m_resp.url

@@ -19,6 +19,11 @@ class XTreamCodeMemoryStream(IXTreamCodeStream):
         if self.m_url is None:
             self.m_url = "memory://" + str(id(self))
 
+    def clone(self) -> "XTreamCodeMemoryStream":
+        # The data payload is read-only during streaming (consumed via a per-instance
+        # offset), so it is safe and intended to share it across clones.
+        return XTreamCodeMemoryStream(self.m_data, self.m_mimetype, self.m_url)
+
     def set_data(self, data: bytearray, mimetype: str) -> None:
         self.m_data = data
         self.m_mimetype = mimetype

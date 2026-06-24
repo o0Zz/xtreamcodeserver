@@ -25,6 +25,10 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         self.m_memorize_m3u8_redirection = memorize_m3u8_redirection
         self.m_redirected_m3u8_uri = None
 
+    def clone(self) -> "XTreamCodePlaylistProxyStream":
+        # Clone the wrapped stream too so the copy shares no per-request state.
+        return XTreamCodePlaylistProxyStream(self.m_stream.clone(), self.m_override_stream_ext, self.m_memorize_m3u8_redirection)
+
     def get_uri(self) -> str:
         return self.m_stream.get_uri()
     
