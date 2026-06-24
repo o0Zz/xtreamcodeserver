@@ -1,6 +1,6 @@
 import logging
-from xtreamcodeserver.entry.container import *
-from xtreamcodeserver.entry.entry import XTreamCodeType
+from xtreamcodeserver.entry.container import XTreamCodeContainer
+from xtreamcodeserver.entry.entry import XTreamCodeType, XTreamCodeEntry
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -1,11 +1,19 @@
 # Specifications
 # https://xtream-ui.org/api-xtreamui-xtreamcode/
 
-from xtreamcodeserver import *
+from xtreamcodeserver.server import XTreamCodeServer
+from xtreamcodeserver.credentials.credentials import XTreamCodeCredentials
+from xtreamcodeserver.entry.entry import XTreamCodeType
+from xtreamcodeserver.entry.category import XTreamCodeCategory
+from xtreamcodeserver.entry.vod import XTreamCodeVod
+from xtreamcodeserver.entry.serie import XTreamCodeSerie
+from xtreamcodeserver.entry.serie_episode import XTreamCodeEpisode
+from xtreamcodeserver.entry.serie_season import XTreamCodeSeason
 from xtreamcodeserver.providers.inmemory.credentials_provider import XTreamCodeCredentialsMemoryProvider
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
-from xtreamcodeserver.entry.serie_season import XTreamCodeSeason
-from xtreamcodeserver.stream.filesystemstream import *
+from xtreamcodeserver.stream.filesystemstream import XTreamCodeFileSystemStream
+import os
+import re
 import time
 import logging
 import argparse

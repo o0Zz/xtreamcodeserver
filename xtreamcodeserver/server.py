@@ -8,8 +8,8 @@ import base64
 from socketserver import ThreadingMixIn
 from xtreamcodeserver.credentials.credentials import XTreamCodeCredentials
 from xtreamcodeserver.entry.category import XTreamCodeCategory
-from xtreamcodeserver.httprequesthandler import *
-from xtreamcodeserver.entry.entry import *
+from xtreamcodeserver.httprequesthandler import XTreamCodeHTTPRequestHandler
+from xtreamcodeserver.entry.entry import XTreamCodeType
 from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProvider
 from xtreamcodeserver.interfaces.epgprovider import IXTreamCodeEPGProvider
 from xtreamcodeserver.interfaces.credentialsprovider import IXTreamCodeCredentialsProvider
@@ -30,7 +30,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 class XTreamCodeDefaultDateTimeProvider(IXTreamCodeDateTimeProvider):
     def utcnow(self):
-        return datetime.datetime.utcnow().replace(tzinfo=timezone.utc)
+        return datetime.datetime.now(timezone.utc)
 
 class XTreamCodeServer(threading.Thread):
 
