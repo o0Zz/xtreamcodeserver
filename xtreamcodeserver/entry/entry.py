@@ -1,3 +1,4 @@
+import re
 import zlib
 import logging
 
@@ -5,6 +6,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Below value has been determined with "Android Smarters Player" (This player reject all ID greater than that)
 XTREAMCODE_ID_MAX_VALUE = 0x7FFFFFFF
+
+def normalize_name_for_id(name: str) -> str:
+    return re.sub(r'\s+', ' ', name).strip().casefold()
 
 class XTreamCodeType:
     UNKNOWN = 0
@@ -24,8 +28,8 @@ class XTreamCodeEntry:
         if extra_id is None:
             extra_id = 0
 
-        if self.m_id == None:
-            self.m_id = zlib.crc32(("%s/%d/%d" % (name, type, extra_id)).encode('utf-8')) & XTREAMCODE_ID_MAX_VALUE  # If the id is not provided use a crc of the crc of the name as ID to be able to have everytime the same id
+        if self.m_id is None:
+            self.m_id = zlib.crc32(("%s/%d/%d" % (normalize_name_for_id(name), type, extra_id)).encode('utf-8')) & XTREAMCODE_ID_MAX_VALUE  # If the id is not provided use a crc of the crc of the name as ID to be able to have everytime the same id
         if self.m_id > XTREAMCODE_ID_MAX_VALUE:
             _LOGGER.error("Invalid entry ID (%d), ID value bigger than the maximum allowed (%d)" % (self.m_id, XTREAMCODE_ID_MAX_VALUE))
 
