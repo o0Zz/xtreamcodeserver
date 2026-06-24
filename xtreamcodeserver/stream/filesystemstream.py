@@ -41,7 +41,7 @@ class XTreamCodeFileSystemStream(IXTreamCodeStream):
             _LOGGER.error(f"Unable to open file: {self.m_uri}")
             return False
 
-        self.file_fd.seek(self.m_start_offset if self.m_start_offset != None else 0)
+        self.file_fd.seek(self.m_start_offset if self.m_start_offset is not None else 0)
         return True
 
     def close(self) -> None:
@@ -83,7 +83,7 @@ class XTreamCodeFileSystemStream(IXTreamCodeStream):
         if self.file_fd is None:
             return HTTPStatus.NOT_ACCEPTABLE
 
-        if self.m_start_offset != None:
+        if self.m_start_offset is not None:
             return HTTPStatus.PARTIAL_CONTENT
 
         return HTTPStatus.OK

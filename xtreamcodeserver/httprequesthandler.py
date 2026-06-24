@@ -1,6 +1,6 @@
 import base64
 import json
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 from http import HTTPStatus
 import logging
 import urllib
@@ -92,10 +92,10 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
                         total_bytes_sent += len(chunk)
                         try:
                             self.wfile.write(chunk)
-                        except (ConnectionAbortedError, ConnectionResetError, IOError) as e:
+                        except (ConnectionAbortedError, ConnectionResetError, IOError):
                             _LOGGER.info(f"{client_info} -> Client disconnected !")
                             break
-                        except:
+                        except Exception:
                             _LOGGER.exception(f"{client_info} -> Streaming exception during streaming")
                             break
 
@@ -106,7 +106,7 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
             else:
                 _LOGGER.error(f"{client_info} -> Unable to open stream: {stream.get_uri()} (Return 404)")
                 self.send_error(HTTPStatus.NOT_FOUND)
-        except:
+        except Exception:
             _LOGGER.exception(f"{client_info} -> Unexpected streaming exception")
         finally:
             stream.close()
@@ -174,9 +174,9 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
             else:
                 self.__send_error(HTTPStatus.NOT_FOUND, "File not found !")
 
-        except (ConnectionAbortedError, ConnectionResetError) as e:
+        except (ConnectionAbortedError, ConnectionResetError):
             _LOGGER.info(f"{client_info} Client disconnected !")
-        except:
+        except Exception:
             _LOGGER.exception(f"{client_info} EXCEPTION while replying to GET")
             self.__send_error(HTTPStatus.INTERNAL_SERVER_ERROR, 'An exception occured !')
 
@@ -186,6 +186,6 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         _LOGGER.debug("%s:%d HTTP POST: %s (Headers: %s)" % (
             self.client_address[0], self.client_address[1], self.path, str(self.headers).split('\n')))
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
+        #content_length = int(self.headers['Content-Length'])
+        #post_data = self.rfile.read(content_length)
         self.__send_error(HTTPStatus.NOT_IMPLEMENTED)

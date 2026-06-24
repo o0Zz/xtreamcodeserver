@@ -1,6 +1,5 @@
 from abc import abstractmethod
 from http import HTTPStatus
-from xtreamcodeserver.entry.entry import XTreamCodeType
 
 class IXTreamCodeStream:
     

@@ -18,7 +18,7 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
         self.m_byte_received = 0
 
     def get_uri(self) -> str:
-        if self.m_resp != None:
+        if self.m_resp is not None:
             return self.m_resp.url
         
         return self.m_uri
@@ -109,14 +109,14 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
                 _LOGGER.error(f"HTTPStream: timeout for URL: '{self.m_uri}'")
             except requests.exceptions.ConnectionError:
                 _LOGGER.error(f"HTTPStream: Connection error: '{self.m_uri}' (Probably caused by resp.close())")
-            except:
+            except Exception:
                 _LOGGER.exception(f"HTTPStream: exception for url: '{self.m_uri}'")
 
         self.close()
         return None
     
     def is_end_of_stream(self) -> bool:
-        return self.m_resp == None
+        return self.m_resp is None
 
     def is_opened(self) -> bool:
         return (self.m_resp is not None) and (int(self.m_resp.status_code / 100) == 2)

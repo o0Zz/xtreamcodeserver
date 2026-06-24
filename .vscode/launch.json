@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: xtreamcodeserver",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "xtreamcodeserver",
+            "args": [
+                "-port", "8081",
+                "-addr", "0.0.0.0"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

@@ -1,6 +1,5 @@
 import logging
 import threading
-import re
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
 import queue
 from http import HTTPStatus
@@ -36,7 +35,7 @@ class XTreamCodeTranscodeStream(IXTreamCodeStream, threading.Thread):
         _LOGGER.info("Stream trancoding: stopped !")
 
     def is_running(self):
-        return (self.m_ffmpeg_process != None) and (self.m_ffmpeg_process.poll() == None)  # None means process running
+        return (self.m_ffmpeg_process is not None) and (self.m_ffmpeg_process.poll() is None)  # None means process running
 
     def open(self, http_req_path, http_req_headers):
         import ffmpeg
@@ -64,7 +63,7 @@ class XTreamCodeTranscodeStream(IXTreamCodeStream, threading.Thread):
 
             self.m_ffmpeg_process = ffmpeg.run_async(self.m_ffmpeg_stream, cmd='ffmpeg', pipe_stdin=True, pipe_stdout=True,
                                                      pipe_stderr=False, quiet=False, overwrite_output=False)
-        except:
+        except Exception:
             _LOGGER.exception("FFMPEG exception (Do you have ffmpeg executable in your PATH ?)")
             self.stream.close()
             return False
@@ -100,7 +99,7 @@ class XTreamCodeTranscodeStream(IXTreamCodeStream, threading.Thread):
         input = self.stream.read_chunk(chunk_size)
 
         if self.is_running():
-            if input != None:
+            if input is not None:
                 self.m_ffmpeg_process.stdin.write(input)
 
             buffer = self.m_buffer.get()

@@ -1,5 +1,4 @@
 import requests
-import datetime
 from xtreamcodeserver.credentials.credentials import XTreamCodeCredentials
 from xtreamcodeserver.providers.inmemory.credentials_provider import XTreamCodeCredentialsMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer

@@ -29,21 +29,21 @@ def browse_folder(path, type):
                 filename_wo_ext, extension = os.path.splitext(filename)
                 folder_name = os.path.basename(os.path.dirname(fullpath))
 
-                if not extension in [".mkv", ".mp4", ".avi"]:
+                if extension not in [".mkv", ".mp4", ".avi"]:
                     _LOGGER.warning(f"Ignoring file: {fullpath} (Do not have allowed extension)")
                     pass
 
                 if type == XTreamCodeType.VOD:
-                    if not folder_name in category_list:
+                    if folder_name not in category_list:
                         category_list[folder_name] = XTreamCodeCategory(name=folder_name, category_type=type)
 
                     category_list[folder_name].add_entry(XTreamCodeVod(name=filename_wo_ext, extension=extension, stream=XTreamCodeFileSystemStream(fullpath), description=f"This is the description for {filename_wo_ext}"))
 
                 elif type == XTreamCodeType.SERIE:
 
-                    if not "all_series" in category_list:
+                    if "all_series" not in category_list:
                         category_list["all_series"] = XTreamCodeCategory(name=folder_name, category_type=type)
-                    if not folder_name in serie_list:
+                    if folder_name not in serie_list:
                         serie_list[folder_name] = XTreamCodeSerie(name=folder_name)
                         category_list["all_series"].add_entry(serie_list[folder_name])
 
@@ -51,7 +51,7 @@ def browse_folder(path, type):
                     match = re.search(season_regexp, filename, re.I)
                     if match:
                         season = serie_list[folder_name].get_season(int(match.group(1)))
-                        if season == None:
+                        if season is None:
                             season = XTreamCodeSeason(season_number=int(match.group(1)), name=filename_wo_ext, cover_url=None, description=None)
                             serie_list[folder_name].add_season(season)
 
@@ -59,7 +59,7 @@ def browse_folder(path, type):
                     else:
                         _LOGGER.warning(f"Ignoring serie: {fullpath} (Unable to determine Season/Episode)")
 
-    except:
+    except Exception:
         _LOGGER.exception(f"Exception while browsing folder: {path}")
 
     return category_list

@@ -21,7 +21,7 @@ class TestStream:
         self.server.setup(bind_port=self.bind_port)
         self.server.start()
         self.test_url = f"http://127.0.0.1:{self.bind_port}"
-        self.test_url_m3u8 = f"https://demo.unified-streaming.com/k8s/vod2live/stable/unified-learning.isml/unified-learning-audio_eng=128000-video=2200000.m3u8"
+        self.test_url_m3u8 = "https://demo.unified-streaming.com/k8s/vod2live/stable/unified-learning.isml/unified-learning-audio_eng=128000-video=2200000.m3u8"
  
     def teardown_class(self):
         self.server.stop()
@@ -65,7 +65,7 @@ class TestStream:
 
         stream.close() #Force close to simulate remote disconnection
         ret = stream.read_chunk(128) #Should return None
-        assert ret == None
+        assert ret is None
         stream.close()
 
     def test_httpredirect_stream(self):

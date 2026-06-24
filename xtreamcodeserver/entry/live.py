@@ -1,5 +1,4 @@
 import logging
-from xtreamcodeserver.entry import *
 from xtreamcodeserver.entry.entry import XTreamCodeEntry, XTreamCodeType
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
 
@@ -46,6 +45,4 @@ class XTreamCodeLive(XTreamCodeEntry):
             "tv_archive": 0,
             "tv_archive_duration": 0
         }
-       
-        return ret
 

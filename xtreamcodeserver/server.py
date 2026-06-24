@@ -87,11 +87,11 @@ class XTreamCodeServer(threading.Thread):
     # ------------------------------------------------------------
 
     def is_credentials_valid(self, username: str, password: str) -> bool:
-        if self.m_credentials_provider == None:
+        if self.m_credentials_provider is None:
             return True
         
         credential = self.m_credentials_provider.get_credentials(username, password)
-        if credential == None:
+        if credential is None:
             return False
         
         if not credential.is_active(self.m_datetime_provider.utcnow()):
@@ -140,7 +140,7 @@ class XTreamCodeServer(threading.Thread):
     def stop(self) -> None:
         _LOGGER.info("Stopping XTreamcode server ...")
 
-        if self.m_http_server != None:
+        if self.m_http_server is not None:
             self.m_http_server.shutdown()
 
         self.join()
@@ -300,7 +300,7 @@ class XTreamCodeServer(threading.Thread):
         entries = self.m_entry_provider.get_entries(category_type=category_type)
         for entry in entries:
 
-            if category_id != None and entry.get_category_id() != category_id:
+            if category_id is not None and entry.get_category_id() != category_id:
                 continue
 
             category = self.m_entry_provider.get_category(entry.get_category_id())
@@ -436,7 +436,7 @@ class XTreamCodeServer(threading.Thread):
             }
         }
 
-        if credentials.get_expiration_date() != None:
+        if credentials.get_expiration_date() is not None:
             dict["user_info"]["exp_date"] = int(credentials.get_expiration_date().timestamp()) # Time in seconds since epoch time
 
         return dict

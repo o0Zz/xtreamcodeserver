@@ -27,7 +27,7 @@ dev = ["pip-tools", "pytest"]
 Homepage = "https://github.com/o0Zz/xtreamcodeserver"
 
 [project.scripts]
-realpython = "xtreamcodeserver.__main__:main"
+xtreamcodeserver = "xtreamcodeserver.__main__:main"
 
 [tool.bumpver]
 current_version = "1.0.0"

@@ -76,7 +76,7 @@ class XTreamCodeEntryMemoryProvider(IXTreamCodeEntryProvider):
         
         with self.m_lock:
 
-            if container == None:
+            if container is None:
                 entries = []
                 for category_id, category in self.m_categories.items():
                     entries.append(category)

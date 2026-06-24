@@ -57,7 +57,7 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         _LOGGER.debug(f"XTreamCode Stream Opening {original_uri_wo_ext + stream_extension} (Redirect: {redirection})")
         
         ret = self.m_stream.open(http_req_path, http_req_headers)
-        if (ret == True) and (http_req_extension == ".m3u8"):
+        if ret and (http_req_extension == ".m3u8"):
             self._content = self.__proxify_m3u8(http_req_path)
             if self._content is None:
                 self.m_stream.close()

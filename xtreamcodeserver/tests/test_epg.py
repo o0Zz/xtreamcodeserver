@@ -10,7 +10,6 @@ from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProv
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
 from xtreamcodeserver.providers.inmemory.epg_provider import XTreamCodeEPGMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer
-from xtreamcodeserver.stream.memorystream import XTreamCodeMemoryStream
 
 class DateTimeProviderTest(IXTreamCodeDateTimeProvider):
     def __init__(self) -> None:

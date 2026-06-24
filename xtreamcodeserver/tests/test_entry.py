@@ -5,7 +5,7 @@ from xtreamcodeserver.entry.serie_episode import XTreamCodeEpisode
 from xtreamcodeserver.entry.serie_season import XTreamCodeSeason
 from xtreamcodeserver.entry.vod import XTreamCodeVod
 from xtreamcodeserver.entry.category import XTreamCodeCategory
-from xtreamcodeserver.entry.entry import XTreamCodeEntry, XTreamCodeType
+from xtreamcodeserver.entry.entry import XTreamCodeType
 from xtreamcodeserver.entry.live import XTreamCodeLive
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer
