@@ -37,11 +37,12 @@ class TestStream:
     
     def test_http_stream_correct_content(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.VOD, category_id=1)
-        category.add_entry(XTreamCodeVod(name="test", extension="mkv", stream=XTreamCodeHTTPStream("https://httpbin.org/get"), vod_id=2))
+        category.add_entry(XTreamCodeVod(name="test", extension="mkv", stream=XTreamCodeHTTPStream("https://www.google.com"), vod_id=2))
         self.entry_provider.set_categories({1: category})
 
         r = requests.get(self.test_url + "/movies/test/test/2.mkv")
-        assert r.json()["url"] == 'https://httpbin.org/get'
+        assert r.status_code == 200
+        assert b"<html" in r.content.lower()
 
     def test_http_stream_retry_live(self):
         stream = XTreamCodeHTTPStream(self.test_url_m3u8)

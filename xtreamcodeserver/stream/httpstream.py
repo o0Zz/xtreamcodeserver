@@ -68,6 +68,13 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
             self.m_rsp_header.pop("server", None)  # Will be automatically added by the self.end_headers()
             self.m_rsp_header.pop("transfer-encoding", None)  # Because of stream=True, the "requests.get" will add transfer-encoding, but we don't except to send back data as chunked, thus remove this header
 
+            # iter_content() transparently decodes gzip/deflate, so the body we forward is already decompressed.
+            # We must therefore drop the upstream "content-encoding" (else the client decodes again and fails) and
+            # the now-stale "content-length" (it was the compressed length); only when the upstream actually compressed.
+            if "content-encoding" in self.m_rsp_header:
+                self.m_rsp_header.pop("content-encoding", None)
+                self.m_rsp_header.pop("content-length", None)
+
             return True
 
         return False
