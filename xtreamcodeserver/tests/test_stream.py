@@ -112,16 +112,27 @@ b"""
 
     def test_playlist_proxy_memorize_m3u8_redirection(self):
         # This test is to check if the redirection is memorized by the playlist proxy stream
-        # This is useful to avoid to jump from server1 to server2 during streaming that cause playback issue
+        # This is useful to avoid to jump from server1 to server2 during streaming that cause playback issue.
+        # The server hands each request its own clone (see server.get_stream), so we record the uri each
+        # opened clone is pointed at into a list shared across clones, and assert on what was actually opened.
+        opened_uris = []
+
         class XTreamCodeMemoryStreamRedirect(XTreamCodeMemoryStream):
             def __init__(self, data, mime_type, uri):
                 super().__init__(b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1093\n#EXTINF:9.640000,\n/path/to/file/1_1094.ts\n", mime_type, uri)
 
+            def clone(self):
+                return XTreamCodeMemoryStreamRedirect(self.m_data, self.m_mimetype, self.m_url)
+
+            def open(self, http_req_path, http_req_headers):
+                opened_uris.append(self.m_url)
+                return super().open(http_req_path, http_req_headers)
+
             def get_uri(self):
                 if self.is_opened():
                     return "memory://redirected_url/redirected_file" #Fake a redirection
                 return super().get_uri()
-            
+
         memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
         category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
@@ -129,24 +140,34 @@ b"""
 
         r = requests.get(self.test_url + "/live/test/test/2.m3u8")
         assert r.status_code == 200
-        assert memory_stream.m_url == "memory://original_url/original_path.m3u8"
+        assert opened_uris[-1] == "memory://original_url/original_path.m3u8"
 
+        # Second request is a brand new clone: it must reuse the memorized redirected server.
         r = requests.get(self.test_url + "/live/test/test/2.m3u8")
         assert r.status_code == 200
-        assert memory_stream.m_url == "memory://redirected_url/redirected_file"
+        assert opened_uris[-1] == "memory://redirected_url/redirected_file"
 
     def test_playlist_proxy_do_not_memorize_ts_redirection(self):
-        # This test make sure playlist proxy don't memorize url for .ts file. 
+        # This test make sure playlist proxy don't memorize url for .ts file.
         # .ts is only open once and should be redirected each time
+        opened_uris = []
+
         class XTreamCodeMemoryStreamRedirect(XTreamCodeMemoryStream):
             def __init__(self, data, mime_type, uri):
                 super().__init__(b"...", mime_type, uri)
 
+            def clone(self):
+                return XTreamCodeMemoryStreamRedirect(self.m_data, self.m_mimetype, self.m_url)
+
+            def open(self, http_req_path, http_req_headers):
+                opened_uris.append(self.m_url)
+                return super().open(http_req_path, http_req_headers)
+
             def get_uri(self):
                 if self.is_opened():
                     return "memory://redirected_url/redirected_file" #Fake a redirection
                 return super().get_uri()
-            
+
         memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
         category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
@@ -154,11 +175,11 @@ b"""
 
         r = requests.get(self.test_url + "/live/test/test/2.ts")
         assert r.status_code == 200
-        assert memory_stream.m_url == "memory://original_url/original_path.ts"
+        assert opened_uris[-1] == "memory://original_url/original_path.ts"
 
         r = requests.get(self.test_url + "/live/test/test/2.ts")
         assert r.status_code == 200
-        assert memory_stream.m_url == "memory://original_url/original_path.ts"
+        assert opened_uris[-1] == "memory://original_url/original_path.ts"
 
     def test_playlist_proxy_stream_download(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)

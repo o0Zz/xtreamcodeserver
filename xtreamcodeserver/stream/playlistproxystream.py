@@ -14,8 +14,16 @@ _LOGGER = logging.getLogger(__name__)
 # http://127.0.0.1:8081/live/username/password/1383663399.ts
 # http://127.0.0.1:8081/live/username/password/1383663399.m3u8
 
+class _RedirectionState:
+    # Shared by reference between a stream and all its clones (see clone()), so the
+    # redirection the provider's load balancer pinned us to survives the per-request
+    # clones the server hands out (see server.get_stream) and every following request
+    # reuses the same upstream server.
+    def __init__(self):
+        self.uri = None
+
 class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
-    def __init__(self, stream: IXTreamCodeStream, override_stream_ext: bool=False, memorize_m3u8_redirection: bool=True):
+    def __init__(self, stream: IXTreamCodeStream, override_stream_ext: bool=False, memorize_m3u8_redirection: bool=True, redirection_state: "_RedirectionState"=None):
         self.m_stream = stream
         self.m_override_stream_ext = override_stream_ext
         self.m_original_uri = self.m_stream.get_uri()
@@ -23,11 +31,12 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         self.m_ext_x_media_sequence = 0
         self.m_last_server_hostname = None
         self.m_memorize_m3u8_redirection = memorize_m3u8_redirection
-        self.m_redirected_m3u8_uri = None
+        self.m_redirection_state = redirection_state if redirection_state is not None else _RedirectionState()
 
     def clone(self) -> "XTreamCodePlaylistProxyStream":
-        # Clone the wrapped stream too so the copy shares no per-request state.
-        return XTreamCodePlaylistProxyStream(self.m_stream.clone(), self.m_override_stream_ext, self.m_memorize_m3u8_redirection)
+        # Clone the wrapped stream too so the copy shares no per-request state,
+        # but keep sharing the redirection holder so server affinity persists.
+        return XTreamCodePlaylistProxyStream(self.m_stream.clone(), self.m_override_stream_ext, self.m_memorize_m3u8_redirection, self.m_redirection_state)
 
     def get_uri(self) -> str:
         return self.m_stream.get_uri()
@@ -53,10 +62,13 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
         self.m_stream.set_uri(original_uri_wo_ext + stream_extension)
 
         redirection = "None"
-        if (http_req_extension == ".m3u8") and (self.m_redirected_m3u8_uri is not None):
-            self.m_stream.set_uri(self.m_redirected_m3u8_uri)
-            redirection = self.m_redirected_m3u8_uri
-            self.m_redirected_m3u8_uri = None
+        memorized_uri = self.m_redirection_state.uri
+        if (http_req_extension == ".m3u8") and (memorized_uri is not None):
+            self.m_stream.set_uri(memorized_uri)
+            redirection = memorized_uri
+            # Consume it: it is re-memorized below only if the open succeeds, so a
+            # dead memorized server falls back to the load balancer next time.
+            self.m_redirection_state.uri = None
         
         _LOGGER.debug(f"XTreamCode Stream Opening {original_uri_wo_ext + stream_extension} (Redirect: {redirection})")
         
@@ -68,7 +80,7 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
                 ret = False
 
             if self.m_memorize_m3u8_redirection:
-                self.m_redirected_m3u8_uri = self.m_stream.get_uri()
+                self.m_redirection_state.uri = self.m_stream.get_uri()
 
         return ret
     
