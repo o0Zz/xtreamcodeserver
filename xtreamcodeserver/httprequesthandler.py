@@ -7,17 +7,19 @@ import os
 from xtreamcodeserver.stream.httpstream import XTreamCodeHTTPStream
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
 from xtreamcodeserver.interfaces.proxyregistry import IXTreamCodeProxyRegistry
+from xtreamcodeserver.utils.http_utils import HTTPUtils
 
 _LOGGER = logging.getLogger(__name__)
 
 class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
-    def __init__(self, xtreamcode_server, proxy_registry: IXTreamCodeProxyRegistry, allow_all_origin: bool, chunk_size: int, request_timeout_seconds: int, *args):
+    def __init__(self, xtreamcode_server, proxy_registry: IXTreamCodeProxyRegistry, allow_all_origin: bool, chunk_size: int, request_timeout_seconds: int, trusted_proxies: list, *args):
         self.m_xtreamcode_server = xtreamcode_server
         self.m_proxy_registry = proxy_registry
         self.m_allow_all_origin = allow_all_origin
         self.m_chunk_size = chunk_size
+        self.m_trusted_proxies = trusted_proxies  # ip_network list, see HTTPUtils.get_client_ip
         # Socket timeout (seconds) while reading the request. Without it an idle client
         # (slowloris) holds a handler thread forever. None disables it.
         self.timeout = request_timeout_seconds
@@ -158,8 +160,11 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            client_ip = self.client_address[0]
+            # Real client IP (X-Forwarded-For honoured only when the peer is a trusted reverse proxy)
+            client_ip = HTTPUtils.get_client_ip(self.client_address[0], self.headers.get("x-forwarded-for"), self.m_trusted_proxies)
             client_info = "%s:%d" % (self.client_address[0], self.client_address[1])
+            if client_ip != self.client_address[0]:
+                client_info += f" (client {client_ip})"
             range = self.headers.get("range")
 
             # _LOGGER.debug("HTTP GET: %s (Headers: %s)" % (self.path, str(self.headers).split('\n')))

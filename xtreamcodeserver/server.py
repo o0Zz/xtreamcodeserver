@@ -16,6 +16,7 @@ from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProv
 from xtreamcodeserver.interfaces.epgprovider import IXTreamCodeEPGProvider
 from xtreamcodeserver.interfaces.credentialsprovider import IXTreamCodeCredentialsProvider
 from xtreamcodeserver.interfaces.entryprovider import IXTreamCodeEntryProvider
+from xtreamcodeserver.utils.http_utils import HTTPUtils
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,6 +157,7 @@ class XTreamCodeServer(threading.Thread):
         self.m_max_concurrent_connections = 200
         self.m_request_timeout_seconds = 30
         self.m_auth_throttle = _AuthThrottle(max_failures=10, lockout_seconds=300)
+        self.m_trusted_proxies = []
         self.m_proxy_registry = proxy_registry
         self.m_stream_slots_lock = threading.Lock()
         self.m_stream_slots = {}  # username -> active stream count
@@ -281,7 +283,7 @@ class XTreamCodeServer(threading.Thread):
         self.m_is_running = True
 
         def _http_request_handler(*args):
-            XTreamCodeHTTPRequestHandler(self, self.m_proxy_registry, self.m_allow_all_origin, self.m_chunk_size, self.m_request_timeout_seconds, *args)
+            XTreamCodeHTTPRequestHandler(self, self.m_proxy_registry, self.m_allow_all_origin, self.m_chunk_size, self.m_request_timeout_seconds, self.m_trusted_proxies, *args)
 
         self.m_http_server = ThreadedHTTPServer((self.m_bind_addr, self.m_bind_port), _http_request_handler, self.m_max_concurrent_connections)
 
@@ -293,12 +295,16 @@ class XTreamCodeServer(threading.Thread):
     # ------------------------------------------------------------
         
     def setup(self, bind_addr: str="0.0.0.0", bind_port: int=8081, external_url: str=None, allow_all_origin: bool=True, timezone: timezone=timezone.utc, chunk_size: int=1024 * 1024,
-              max_concurrent_connections: int=200, request_timeout_seconds: int=30, max_auth_failures: int=10, auth_lockout_seconds: int=300) -> None:
+              max_concurrent_connections: int=200, request_timeout_seconds: int=30, max_auth_failures: int=10, auth_lockout_seconds: int=300,
+              trusted_proxies: list=None) -> None:
         """
         max_concurrent_connections: hard cap on simultaneous client connections (<= 0: unlimited).
         request_timeout_seconds: socket timeout while reading a request (slowloris protection, <= 0: none).
         max_auth_failures / auth_lockout_seconds: a client IP is locked out for auth_lockout_seconds after
             max_auth_failures failed logins within that window (<= 0 disables).
+        trusted_proxies: list of IP/CIDR of reverse proxies (e.g. ["172.22.0.0/16"]). When the TCP peer is one of
+            them, the client IP used for the lockout is taken from X-Forwarded-For. Mandatory behind a reverse
+            proxy, otherwise every client shares the proxy's IP and one attacker locks everybody out.
         """
         self.m_bind_addr = bind_addr
         self.m_bind_port = bind_port
@@ -309,6 +315,7 @@ class XTreamCodeServer(threading.Thread):
         self.m_max_concurrent_connections = max_concurrent_connections
         self.m_request_timeout_seconds = request_timeout_seconds if (request_timeout_seconds and request_timeout_seconds > 0) else None
         self.m_auth_throttle = _AuthThrottle(max_failures=max_auth_failures, lockout_seconds=auth_lockout_seconds)
+        self.m_trusted_proxies = HTTPUtils.parse_networks(trusted_proxies)
 
     # ------------------------------------------------------------
 

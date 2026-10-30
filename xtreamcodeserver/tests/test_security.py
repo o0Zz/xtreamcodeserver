@@ -12,6 +12,7 @@ from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMe
 from xtreamcodeserver.server import XTreamCodeServer
 from xtreamcodeserver.stream.memorystream import XTreamCodeMemoryStream
 from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
+from xtreamcodeserver.utils.http_utils import HTTPUtils
 
 
 class SlowMemoryStream(XTreamCodeMemoryStream):
@@ -99,6 +100,38 @@ class TestSecurity:
         time.sleep(2.2)
         r = requests.get(f"{self.base_url}/player_api.php?username=user1&password=pass1")
         assert r.status_code == HTTPStatus.OK
+
+    def test_client_ip_behind_trusted_proxy(self):
+        trusted = HTTPUtils.parse_networks(["127.0.0.0/8", "172.22.0.0/16"])
+        # Peer is not a proxy: header ignored (forgeable)
+        assert HTTPUtils.get_client_ip("8.8.8.8", "1.2.3.4", trusted) == "8.8.8.8"
+        # Peer is the proxy: rightmost non-proxy hop is the client, a forged prefix is ignored
+        assert HTTPUtils.get_client_ip("172.22.0.2", "1.2.3.4", trusted) == "1.2.3.4"
+        assert HTTPUtils.get_client_ip("172.22.0.2", "9.9.9.9, 1.2.3.4", trusted) == "1.2.3.4"
+        assert HTTPUtils.get_client_ip("172.22.0.2", "1.2.3.4, 172.22.0.3", trusted) == "1.2.3.4"
+        # No header / malformed header / no trusted proxies: peer address
+        assert HTTPUtils.get_client_ip("172.22.0.2", None, trusted) == "172.22.0.2"
+        assert HTTPUtils.get_client_ip("172.22.0.2", "not-an-ip", trusted) == "172.22.0.2"
+        assert HTTPUtils.get_client_ip("172.22.0.2", "1.2.3.4", []) == "172.22.0.2"
+
+    def test_bruteforce_lockout_is_per_forwarded_client(self):
+        server = XTreamCodeServer(self.entry_provider, None, self.credentials, XTreamCodeProxyMemoryRegistry())
+        server.setup(bind_port=8089, max_auth_failures=2, auth_lockout_seconds=30, trusted_proxies=["127.0.0.0/8"])
+        server.start()
+        try:
+            time.sleep(0.2)
+            url_bad = "http://127.0.0.1:8089/player_api.php?username=user1&password=wrong"
+            url_ok = "http://127.0.0.1:8089/player_api.php?username=user1&password=pass1"
+            for _ in range(2):
+                assert requests.get(url_bad, headers={"X-Forwarded-For": "10.1.1.1"}).status_code == HTTPStatus.UNAUTHORIZED
+            # 10.1.1.1 is locked out ...
+            assert requests.get(url_ok, headers={"X-Forwarded-For": "10.1.1.1"}).status_code == HTTPStatus.TOO_MANY_REQUESTS
+            # ... another client behind the same proxy is not
+            assert requests.get(url_ok, headers={"X-Forwarded-For": "10.2.2.2"}).status_code == HTTPStatus.OK
+            # ... and a client forging the locked IP in front of its own does not get locked either
+            assert requests.get(url_ok, headers={"X-Forwarded-For": "10.1.1.1, 10.3.3.3"}).status_code == HTTPStatus.OK
+        finally:
+            server.stop()
 
     # ---------------------------------------------------------------- max_connections
 
