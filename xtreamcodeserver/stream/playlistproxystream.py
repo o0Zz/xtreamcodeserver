@@ -1,10 +1,10 @@
-import base64
 import logging
 import os
 import urllib
 from http import HTTPStatus
 
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
+from xtreamcodeserver.interfaces.proxyregistry import IXTreamCodeProxyRegistry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,8 +23,17 @@ class _RedirectionState:
         self.uri = None
 
 class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
-    def __init__(self, stream: IXTreamCodeStream, override_stream_ext: bool=False, memorize_m3u8_redirection: bool=True, redirection_state: "_RedirectionState"=None):
+    def __init__(self, stream: IXTreamCodeStream, proxy_registry: IXTreamCodeProxyRegistry, override_stream_ext: bool=False, memorize_m3u8_redirection: bool=True, redirection_state: "_RedirectionState"=None):
+        """
+        stream: the upstream stream (playlist or segment) to proxify.
+        proxy_registry: registry shared with the XTreamCodeServer that serves this stream. The rewritten
+            playlist references segments by tokens from this registry, and the server resolves them back.
+        """
+        if proxy_registry is None:
+            raise ValueError("XTreamCodePlaylistProxyStream requires the proxy registry shared with the XTreamCodeServer")
+
         self.m_stream = stream
+        self.m_proxy_registry = proxy_registry
         self.m_override_stream_ext = override_stream_ext
         self.m_original_uri = self.m_stream.get_uri()
         self._content = None
@@ -36,7 +45,7 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
     def clone(self) -> "XTreamCodePlaylistProxyStream":
         # Clone the wrapped stream too so the copy shares no per-request state,
         # but keep sharing the redirection holder so server affinity persists.
-        return XTreamCodePlaylistProxyStream(self.m_stream.clone(), self.m_override_stream_ext, self.m_memorize_m3u8_redirection, self.m_redirection_state)
+        return XTreamCodePlaylistProxyStream(self.m_stream.clone(), self.m_proxy_registry, self.m_override_stream_ext, self.m_memorize_m3u8_redirection, self.m_redirection_state)
 
     def get_uri(self) -> str:
         return self.m_stream.get_uri()
@@ -151,7 +160,10 @@ class XTreamCodePlaylistProxyStream(IXTreamCodeStream):
                 full_uri =  f"{url_parsed.scheme}://{url_parsed.netloc}{path}/{path_without_filename}"
             #_LOGGER.debug("URI: %s" % (full_uri + "/" + filename_with_ext))
 
-            content += "/proxy/" + username + "/" + password + "/" + base64.b64encode(full_uri.encode("utf-8")).decode("utf-8")  + "/" + filename_with_ext + "\n"
+            # Opaque token: never expose the upstream URL (and its credentials) to the client,
+            # and only server-registered URLs can be reached through /proxy/.
+            token = self.m_proxy_registry.register(full_uri)
+            content += "/proxy/" + username + "/" + password + "/" + token + "/" + filename_with_ext + "\n"
 
         if ext_x_media_sequence < self.m_ext_x_media_sequence:
             _LOGGER.error(f"EXT-X-MEDIA-SEQUENCE rollbacks detected ! (Server seq: {ext_x_media_sequence}, Client seq: {self.m_ext_x_media_sequence}), continue anyway ...")

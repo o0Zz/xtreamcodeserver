@@ -4,6 +4,7 @@ from xtreamcodeserver.credentials.credentials import XTreamCodeCredentials
 from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProvider
 from xtreamcodeserver.providers.inmemory.credentials_provider import XTreamCodeCredentialsMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer
+from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
 
 class DateTimeProviderTest(IXTreamCodeDateTimeProvider):
     def __init__(self) -> None:
@@ -18,7 +19,7 @@ class TestInfos:
         self.bind_port = 8084
         self.credentials = XTreamCodeCredentialsMemoryProvider()
         self.datetime_provider = DateTimeProviderTest()
-        self.server = XTreamCodeServer(None, None, self.credentials, self.datetime_provider)
+        self.server = XTreamCodeServer(None, None, self.credentials, XTreamCodeProxyMemoryRegistry(), self.datetime_provider)
         self.server.setup(bind_port=self.bind_port)
         self.server.start()
         self.test_url = f"http://127.0.0.1:{self.bind_port}/player_api.php?username=test&password=test"

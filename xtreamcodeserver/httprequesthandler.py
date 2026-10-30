@@ -1,4 +1,3 @@
-import base64
 import json
 from http.server import BaseHTTPRequestHandler
 from http import HTTPStatus
@@ -7,16 +6,21 @@ import urllib
 import os
 from xtreamcodeserver.stream.httpstream import XTreamCodeHTTPStream
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
+from xtreamcodeserver.interfaces.proxyregistry import IXTreamCodeProxyRegistry
 
 _LOGGER = logging.getLogger(__name__)
 
 class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
-    def __init__(self, xtreamcode_server, allow_all_origin, chunk_size, *args):
+    def __init__(self, xtreamcode_server, proxy_registry: IXTreamCodeProxyRegistry, allow_all_origin: bool, chunk_size: int, request_timeout_seconds: int, *args):
         self.m_xtreamcode_server = xtreamcode_server
+        self.m_proxy_registry = proxy_registry
         self.m_allow_all_origin = allow_all_origin
         self.m_chunk_size = chunk_size
+        # Socket timeout (seconds) while reading the request. Without it an idle client
+        # (slowloris) holds a handler thread forever. None disables it.
+        self.timeout = request_timeout_seconds
         BaseHTTPRequestHandler.__init__(self, *args)
 
     def log_message(self, format, *args):
@@ -82,6 +86,10 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
         total_bytes_sent = 0
         try:
+            # The request is parsed and the client authenticated: lift the request read timeout so a
+            # paused player (TCP window full) does not get cut off. Concurrency is bounded by max_connections.
+            self.connection.settimeout(None)
+
             if stream.open(self.get_path(), self.get_headers()):
                 self.send_response(stream.get_http_status_code())
                 self.send_headers(stream.get_http_headers())
@@ -111,35 +119,71 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
         finally:
             stream.close()
 
+    def __stream_with_slot(self, credentials, stream: IXTreamCodeStream) -> None:
+        # Enforce the per-account "max_connections": one slot per concurrent stream.
+        if not self.m_xtreamcode_server.acquire_stream_slot(credentials):
+            _LOGGER.warning("%s:%d -> Max connections reached for user '%s'" % (self.client_address[0], self.client_address[1], credentials.get_username()))
+            stream.close()
+            return self.__send_error(HTTPStatus.TOO_MANY_REQUESTS, "Max connections reached !")
+
+        try:
+            self.stream(stream)
+        finally:
+            self.m_xtreamcode_server.release_stream_slot(credentials)
+
+    def __authenticate(self, query: dict, path_splitted: list):
+        # Check credentials for /xxxx/username/password/stream_id or get.php?username=username&password=password
+        candidates = [(query.get("username"), query.get("password"))]
+        if len(path_splitted) >= 3:
+            candidates.append((path_splitted[0], path_splitted[1]))
+            candidates.append((path_splitted[1], path_splitted[2]))
+
+        for username, password in candidates:
+            authenticated, credentials = self.m_xtreamcode_server.authenticate(username, password)
+            if authenticated:
+                return True, credentials
+
+        return False, None
+
+    @staticmethod
+    def __is_safe_filename(filename: str) -> bool:
+        return bool(filename) and ("/" not in filename) and ("\\" not in filename) and (filename not in (".", ".."))
+
     def do_OPTIONS(self):
         http_headers = {"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                         "Access-Control-Allow-Headers": "Content-Type"}
-    
+
         self.__send_response(HTTPStatus.OK, http_headers)
         self.close()
 
     def do_GET(self):
         try:
+            client_ip = self.client_address[0]
             client_info = "%s:%d" % (self.client_address[0], self.client_address[1])
             range = self.headers.get("range")
-           
+
             # _LOGGER.debug("HTTP GET: %s (Headers: %s)" % (self.path, str(self.headers).split('\n')))
             _LOGGER.info(f"{client_info} HTTP GET: {self.path} (Range: {range})")
 
             interface_ip = self.request.getsockname()[0]
             query = self.get_query()
             path_splitted = self.get_path().split('/')[1:]
- 
+
             if query.get("u") and not query.get("username"):
                 query["username"] = query.get("u")
             if query.get("p") and not query.get("password"):
                 query["password"] = query.get("p")
 
-            # Check credentials for /xxxx/username/password/stream_id or get.php?username=username&password=password
-            if not self.m_xtreamcode_server.is_credentials_valid(query.get("username"), query.get("password")):
-                if not (len(path_splitted) >= 3 and self.m_xtreamcode_server.is_credentials_valid(path_splitted[0], path_splitted[1])):
-                    if not (len(path_splitted) >= 3 and self.m_xtreamcode_server.is_credentials_valid(path_splitted[1], path_splitted[2])):
-                        return self.__send_error(HTTPStatus.UNAUTHORIZED, "Invalid username/password, inactive or expired !")
+            # Brute-force protection: clients with too many failed logins are locked out for a while
+            if self.m_xtreamcode_server.is_client_locked_out(client_ip):
+                return self.__send_error(HTTPStatus.TOO_MANY_REQUESTS, "Too many failed login attempts, try again later !")
+
+            authenticated, credentials = self.__authenticate(query, path_splitted)
+            if not authenticated:
+                self.m_xtreamcode_server.on_authentication_failed(client_ip)
+                return self.__send_error(HTTPStatus.UNAUTHORIZED, "Invalid username/password, inactive or expired !")
+
+            self.m_xtreamcode_server.on_authentication_succeeded(client_ip)
 
             if path_splitted[-1] == "get.php" or path_splitted[-1] == "playlist.m3u":
                 m3u_str = self.m_xtreamcode_server.get_m3u(query, interface_ip).encode('utf-8')
@@ -163,13 +207,23 @@ class XTreamCodeHTTPRequestHandler(BaseHTTPRequestHandler):
 
                 self.__send_response(HTTPStatus.OK, http_headers, reply)
 
-                # Stream file for /proxy/username/password/<base64_url>.ts
+                # Stream file for /proxy/username/password/<token>/<filename>
+                # The token is an opaque id registered by the playlist proxy (see IXTreamCodeProxyRegistry):
+                # clients cannot make the server fetch arbitrary URLs.
             elif path_splitted[0] == "proxy":
-                self.stream( XTreamCodeHTTPStream( base64.b64decode(path_splitted[3]).decode("utf-8") + "/" + path_splitted[4] ) )
+                if len(path_splitted) < 5 or not self.__is_safe_filename(path_splitted[4]):
+                    return self.__send_error(HTTPStatus.NOT_FOUND, "File not found !")
+
+                upstream_base_url = self.m_proxy_registry.resolve(path_splitted[3])
+                if upstream_base_url is None:
+                    _LOGGER.warning(f"{client_info} -> Unknown proxy token (Return 404)")
+                    return self.__send_error(HTTPStatus.NOT_FOUND, "File not found !")
+
+                self.__stream_with_slot(credentials, XTreamCodeHTTPStream(upstream_base_url + "/" + path_splitted[4]))
 
                 # Stream file for /xxxx/username/password/stream_id or /username/password/stream_id
             elif stream := self.m_xtreamcode_server.get_stream(int(os.path.splitext(path_splitted[-1])[0])):
-                self.stream( stream )
+                self.__stream_with_slot(credentials, stream)
 
             else:
                 self.__send_error(HTTPStatus.NOT_FOUND, "File not found !")

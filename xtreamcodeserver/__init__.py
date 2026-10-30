@@ -3,6 +3,7 @@ from xtreamcodeserver.interfaces.credentialsprovider import IXTreamCodeCredentia
 from xtreamcodeserver.interfaces.epgprovider import IXTreamCodeEPGProvider
 from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProvider
 from xtreamcodeserver.interfaces.stream import IXTreamCodeStream
+from xtreamcodeserver.interfaces.proxyregistry import IXTreamCodeProxyRegistry
 
 from xtreamcodeserver.entry.entry import XTreamCodeType, XTreamCodeEntry
 from xtreamcodeserver.entry.container import XTreamCodeContainer
@@ -27,6 +28,8 @@ from xtreamcodeserver.stream.playlistproxystream import XTreamCodePlaylistProxyS
 from xtreamcodeserver.stream.memorystream import XTreamCodeMemoryStream
 from xtreamcodeserver.stream.transcodestream import XTreamCodeTranscodeStream
 
+from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
+
 __all__ = [
     # Interfaces
     "IXTreamCodeEntryProvider",
@@ -34,6 +37,7 @@ __all__ = [
     "IXTreamCodeEPGProvider",
     "IXTreamCodeDateTimeProvider",
     "IXTreamCodeStream",
+    "IXTreamCodeProxyRegistry",
     # Entries
     "XTreamCodeType",
     "XTreamCodeEntry",
@@ -59,4 +63,7 @@ __all__ = [
     "XTreamCodePlaylistProxyStream",
     "XTreamCodeMemoryStream",
     "XTreamCodeTranscodeStream",
+
+    # Providers
+    "XTreamCodeProxyMemoryRegistry",
 ]

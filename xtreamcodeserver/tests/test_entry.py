@@ -9,6 +9,7 @@ from xtreamcodeserver.entry.entry import XTreamCodeType
 from xtreamcodeserver.entry.live import XTreamCodeLive
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer
+from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
 from xtreamcodeserver.stream.memorystream import XTreamCodeMemoryStream
 
 class TestEntry:
@@ -16,7 +17,7 @@ class TestEntry:
     def setup_class(self):
         self.bind_port = 8082
         self.entry_provider = XTreamCodeEntryMemoryProvider()
-        self.server = XTreamCodeServer(self.entry_provider, None, None)
+        self.server = XTreamCodeServer(self.entry_provider, None, None, XTreamCodeProxyMemoryRegistry())
         self.server.setup(bind_port=self.bind_port)
         self.server.start()
         self.test_url = f"http://127.0.0.1:{self.bind_port}/"

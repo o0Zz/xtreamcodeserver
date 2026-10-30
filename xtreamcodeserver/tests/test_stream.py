@@ -5,6 +5,7 @@ from xtreamcodeserver.entry.vod import XTreamCodeVod
 from xtreamcodeserver.entry.category import XTreamCodeCategory
 from xtreamcodeserver.entry.entry import XTreamCodeType
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
+from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
 from xtreamcodeserver.server import XTreamCodeServer
 from xtreamcodeserver.stream.filesystemstream import XTreamCodeFileSystemStream
 from xtreamcodeserver.stream.httpredirectstream import XTreamCodeHTTPRedirectStream
@@ -17,7 +18,8 @@ class TestStream:
     def setup_class(self):
         self.bind_port = 8085
         self.entry_provider = XTreamCodeEntryMemoryProvider()
-        self.server = XTreamCodeServer(self.entry_provider, None, None)
+        self.proxy_registry = XTreamCodeProxyMemoryRegistry()
+        self.server = XTreamCodeServer(self.entry_provider, None, None, self.proxy_registry)
         self.server.setup(bind_port=self.bind_port)
         self.server.start()
         self.test_url = f"http://127.0.0.1:{self.bind_port}"
@@ -80,7 +82,7 @@ class TestStream:
 
     def test_playlist_proxy_stream_m3u8(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
-        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(XTreamCodeMemoryStream(
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(proxy_registry=self.proxy_registry, stream=XTreamCodeMemoryStream(
 b"""
 #EXTM3U
 #EXT-X-VERSION:3
@@ -97,18 +99,22 @@ b"""
         self.entry_provider.set_categories({1: category})
 
         r = requests.get(self.test_url + "/live/test/test/2.m3u8")
-        assert r.content == b"""#EXTM3U
+        # Segment URLs carry an opaque token (not the upstream URL): resolve it through the registry
+        token = self.proxy_registry.register("memory://test/path/to/file")
+        assert r.content == f"""#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-MEDIA-SEQUENCE:1093
 #EXT-X-ALLOW-CACHE:YES
 #EXT-X-TARGETDURATION:12
 #EXTINF:9.640000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_1.ts
+/proxy/test/test/{token}/1_1.ts
 #EXTINF:11.520000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_2.ts
+/proxy/test/test/{token}/1_2.ts
 #EXTINF:9.600000,
-/proxy/test/test/bWVtb3J5Oi8vdGVzdC9wYXRoL3RvL2ZpbGU=/1_3.ts
-"""
+/proxy/test/test/{token}/1_3.ts
+""".encode("utf-8")
+        assert b"memory://" not in r.content
+        assert b"bWVtb3J5" not in r.content  # base64 of "memory" must not leak anymore
 
     def test_playlist_proxy_memorize_m3u8_redirection(self):
         # This test is to check if the redirection is memorized by the playlist proxy stream
@@ -135,7 +141,7 @@ b"""
 
         memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
-        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, self.proxy_registry, override_stream_ext=True), live_id=2))
         self.entry_provider.set_categories({1: category})
 
         r = requests.get(self.test_url + "/live/test/test/2.m3u8")
@@ -170,7 +176,7 @@ b"""
 
         memory_stream = XTreamCodeMemoryStreamRedirect("", "application/x-mpegURL", "memory://original_url/original_path")
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
-        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, override_stream_ext=True), live_id=2))
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(memory_stream, self.proxy_registry, override_stream_ext=True), live_id=2))
         self.entry_provider.set_categories({1: category})
 
         r = requests.get(self.test_url + "/live/test/test/2.ts")
@@ -183,7 +189,7 @@ b"""
 
     def test_playlist_proxy_stream_download(self):
         category = XTreamCodeCategory(name="test", category_type=XTreamCodeType.LIVE, category_id=1)
-        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(XTreamCodeHTTPStream(self.test_url_m3u8)), live_id=2))
+        category.add_entry(XTreamCodeLive(name="test", stream=XTreamCodePlaylistProxyStream(XTreamCodeHTTPStream(self.test_url_m3u8), self.proxy_registry), live_id=2))
         self.entry_provider.set_categories({1: category})
 
         r = requests.get(self.test_url + "/live/test/test/2.m3u8")

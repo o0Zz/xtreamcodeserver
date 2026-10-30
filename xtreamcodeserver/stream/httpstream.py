@@ -7,6 +7,21 @@ _LOGGER = logging.getLogger(__name__)
 
 LOG_HEADERS = False
 
+# Only these client request headers are forwarded upstream. Everything else
+# (cookies, authorization, x-forwarded-*, hop-by-hop headers, ...) is dropped so
+# a client cannot use the server to relay arbitrary headers to the upstream.
+FORWARDED_REQUEST_HEADERS = frozenset([
+    "range",
+    "if-range",
+    "if-modified-since",
+    "if-none-match",
+    "user-agent",
+    "accept",
+    "accept-language",
+    "accept-encoding",
+    "icy-metadata",
+])
+
 class XTreamCodeHTTPStream(IXTreamCodeStream):
     def __init__(self, url: str, max_retry: int=3):
         self.m_uri = url
@@ -48,9 +63,9 @@ class XTreamCodeHTTPStream(IXTreamCodeStream):
 
     def open(self, http_req_path: str, http_req_headers: dict) -> bool:
         req_headers = {}
-        for key, value in http_req_headers.items():
-            req_headers[key.lower()] = value
-        req_headers.pop("host", None)  # Remove original header and let requests provide the correct "host"
+        for key, value in (http_req_headers or {}).items():
+            if key.lower() in FORWARDED_REQUEST_HEADERS:
+                req_headers[key.lower()] = value
         
         self.m_byte_received = 0
         self.m_req_headers = req_headers

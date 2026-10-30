@@ -1,11 +1,13 @@
 import datetime
 import threading
+import time
 from http.server import HTTPServer
 import logging
 import urllib
 from datetime import timezone
 import base64
 from socketserver import ThreadingMixIn
+from xtreamcodeserver.interfaces.proxyregistry import IXTreamCodeProxyRegistry
 from xtreamcodeserver.credentials.credentials import XTreamCodeCredentials
 from xtreamcodeserver.entry.category import XTreamCodeCategory
 from xtreamcodeserver.httprequesthandler import XTreamCodeHTTPRequestHandler
@@ -26,7 +28,102 @@ def xml_escape(data):
     return data
     
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
+    """Handle requests in a separate thread, with a hard cap on concurrent connections."""
+
+    daemon_threads = True
+    request_queue_size = 64
+
+    def __init__(self, server_address, request_handler_class, max_concurrent_connections: int = 0):
+        self.m_connection_semaphore = None
+        if max_concurrent_connections and max_concurrent_connections > 0:
+            self.m_connection_semaphore = threading.BoundedSemaphore(max_concurrent_connections)
+        HTTPServer.__init__(self, server_address, request_handler_class)
+
+    def process_request(self, request, client_address):
+        if self.m_connection_semaphore is not None and not self.m_connection_semaphore.acquire(blocking=False):
+            # Too many connections: drop the new one instead of spawning yet another thread
+            _LOGGER.warning(f"{client_address[0]}:{client_address[1]} -> Connection refused (Max concurrent connections reached)")
+            self.shutdown_request(request)
+            return
+
+        try:
+            ThreadingMixIn.process_request(self, request, client_address)
+        except Exception:
+            self.__release_connection()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            ThreadingMixIn.process_request_thread(self, request, client_address)
+        finally:
+            self.__release_connection()
+
+    def __release_connection(self):
+        if self.m_connection_semaphore is not None:
+            try:
+                self.m_connection_semaphore.release()
+            except ValueError:
+                pass
+
+
+class _AuthThrottle:
+    """Per client IP lock-out after too many failed logins (brute-force protection)."""
+
+    def __init__(self, max_failures: int, lockout_seconds: int):
+        self.m_lock = threading.Lock()
+        self.m_max_failures = max_failures
+        self.m_lockout_seconds = lockout_seconds
+        self.m_clients = {}  # ip -> [failure_count, window_start, locked_until]
+
+    def is_enabled(self) -> bool:
+        return self.m_max_failures > 0 and self.m_lockout_seconds > 0
+
+    def is_locked(self, client_ip: str) -> bool:
+        if not self.is_enabled():
+            return False
+
+        now = time.monotonic()
+        with self.m_lock:
+            state = self.m_clients.get(client_ip)
+            if state is None:
+                return False
+
+            if state[2] > now:
+                return True
+
+            if state[1] + self.m_lockout_seconds < now:  # Window expired, forget it
+                self.m_clients.pop(client_ip, None)
+
+            return False
+
+    def record_failure(self, client_ip: str) -> None:
+        if not self.is_enabled():
+            return
+
+        now = time.monotonic()
+        with self.m_lock:
+            state = self.m_clients.get(client_ip)
+            if state is None or state[1] + self.m_lockout_seconds < now:
+                state = [0, now, 0.0]
+                self.m_clients[client_ip] = state
+
+            state[0] += 1
+            if state[0] >= self.m_max_failures:
+                state[2] = now + self.m_lockout_seconds
+                _LOGGER.warning(f"{client_ip} -> Locked out for {self.m_lockout_seconds}s after {state[0]} failed login attempts")
+
+            if len(self.m_clients) > 10000:  # Bound memory: purge expired entries
+                for ip in [ip for ip, s in self.m_clients.items() if s[2] <= now and s[1] + self.m_lockout_seconds < now]:
+                    self.m_clients.pop(ip, None)
+
+    def record_success(self, client_ip: str) -> None:
+        if not self.is_enabled():
+            return
+
+        with self.m_lock:
+            state = self.m_clients.get(client_ip)
+            if state is not None and state[2] <= time.monotonic():
+                self.m_clients.pop(client_ip, None)
 
 class XTreamCodeDefaultDateTimeProvider(IXTreamCodeDateTimeProvider):
     def utcnow(self):
@@ -34,8 +131,19 @@ class XTreamCodeDefaultDateTimeProvider(IXTreamCodeDateTimeProvider):
 
 class XTreamCodeServer(threading.Thread):
 
-    def __init__(self, entry_provider: IXTreamCodeEntryProvider, epg_provider: IXTreamCodeEPGProvider, credentials_provider: IXTreamCodeCredentialsProvider, datetime_provider: IXTreamCodeDateTimeProvider=None):
+    def __init__(self, entry_provider: IXTreamCodeEntryProvider, epg_provider: IXTreamCodeEPGProvider, credentials_provider: IXTreamCodeCredentialsProvider, proxy_registry: IXTreamCodeProxyRegistry, datetime_provider: IXTreamCodeDateTimeProvider=None):
+        """
+        entry_provider: categories / streams served by this server.
+        epg_provider: EPG data (may be None).
+        credentials_provider: accounts allowed to connect (None: no authentication).
+        proxy_registry: token <-> upstream URL registry backing the /proxy/ route. Pass the very same
+            instance to every XTreamCodePlaylistProxyStream served by this server.
+        datetime_provider: clock (default: UTC now).
+        """
         threading.Thread.__init__(self)
+
+        if proxy_registry is None:
+            raise ValueError("XTreamCodeServer requires a proxy registry (e.g. XTreamCodeProxyMemoryRegistry)")
 
         self.m_bind_addr = "0.0.0.0"
         self.m_bind_port = 8081
@@ -45,6 +153,12 @@ class XTreamCodeServer(threading.Thread):
         self.m_http_server = None
         self.m_is_running = False
         self.m_chunk_size = 1024 * 1024 
+        self.m_max_concurrent_connections = 200
+        self.m_request_timeout_seconds = 30
+        self.m_auth_throttle = _AuthThrottle(max_failures=10, lockout_seconds=300)
+        self.m_proxy_registry = proxy_registry
+        self.m_stream_slots_lock = threading.Lock()
+        self.m_stream_slots = {}  # username -> active stream count
         self.m_credentials_provider = credentials_provider
         self.m_entry_provider = entry_provider
         self.m_epg_provider = epg_provider
@@ -87,17 +201,79 @@ class XTreamCodeServer(threading.Thread):
     # ------------------------------------------------------------
 
     def is_credentials_valid(self, username: str, password: str) -> bool:
+        authenticated, _credentials = self.authenticate(username, password)
+        return authenticated
+
+    # ------------------------------------------------------------
+
+    def authenticate(self, username: str, password: str) -> tuple[bool, XTreamCodeCredentials]:
+        """Returns (authenticated, credentials). credentials is None when no provider is configured."""
         if self.m_credentials_provider is None:
-            return True
-        
+            return True, None
+
+        if username is None or password is None:
+            return False, None
+
         credential = self.m_credentials_provider.get_credentials(username, password)
         if credential is None:
-            return False
-        
+            return False, None
+
         if not credential.is_active(self.m_datetime_provider.utcnow()):
-            return False
+            return False, None
+
+        return True, credential
+
+    # ------------------------------------------------------------
+
+    def is_client_locked_out(self, client_ip: str) -> bool:
+        return self.m_auth_throttle.is_locked(client_ip)
+
+    def on_authentication_failed(self, client_ip: str) -> None:
+        self.m_auth_throttle.record_failure(client_ip)
+
+    def on_authentication_succeeded(self, client_ip: str) -> None:
+        self.m_auth_throttle.record_success(client_ip)
+
+    # ------------------------------------------------------------
+
+    def acquire_stream_slot(self, credentials: XTreamCodeCredentials) -> bool:
+        """Enforce credentials.max_connections (<= 0 or None means unlimited)."""
+        if credentials is None:
+            return True
+
+        max_connections = credentials.get_max_connections()
+        if max_connections is None or max_connections <= 0:
+            return True
+
+        username = credentials.get_username()
+        with self.m_stream_slots_lock:
+            current = self.m_stream_slots.get(username, 0)
+            if current >= max_connections:
+                return False
+            self.m_stream_slots[username] = current + 1
 
         return True
+
+    def release_stream_slot(self, credentials: XTreamCodeCredentials) -> None:
+        if credentials is None:
+            return
+
+        max_connections = credentials.get_max_connections()
+        if max_connections is None or max_connections <= 0:
+            return
+
+        username = credentials.get_username()
+        with self.m_stream_slots_lock:
+            current = self.m_stream_slots.get(username, 0)
+            if current <= 1:
+                self.m_stream_slots.pop(username, None)
+            else:
+                self.m_stream_slots[username] = current - 1
+
+    def get_active_stream_count(self, username: str) -> int:
+        with self.m_stream_slots_lock:
+            return self.m_stream_slots.get(username, 0)
+
 
     # ------------------------------------------------------------
     
@@ -105,9 +281,9 @@ class XTreamCodeServer(threading.Thread):
         self.m_is_running = True
 
         def _http_request_handler(*args):
-            XTreamCodeHTTPRequestHandler(self, self.m_allow_all_origin, self.m_chunk_size, *args)
+            XTreamCodeHTTPRequestHandler(self, self.m_proxy_registry, self.m_allow_all_origin, self.m_chunk_size, self.m_request_timeout_seconds, *args)
 
-        self.m_http_server = ThreadedHTTPServer((self.m_bind_addr, self.m_bind_port), _http_request_handler)
+        self.m_http_server = ThreadedHTTPServer((self.m_bind_addr, self.m_bind_port), _http_request_handler, self.m_max_concurrent_connections)
 
         _LOGGER.info(f"XTreamcode server started ! (Listening on {self.m_bind_addr}:{self.m_bind_port})")
         self.m_http_server.serve_forever()
@@ -116,13 +292,23 @@ class XTreamCodeServer(threading.Thread):
 
     # ------------------------------------------------------------
         
-    def setup(self, bind_addr: str="0.0.0.0", bind_port: int=8081, external_url: str=None, allow_all_origin: bool=True, timezone: timezone=timezone.utc, chunk_size: int=1024 * 1024) -> None:
+    def setup(self, bind_addr: str="0.0.0.0", bind_port: int=8081, external_url: str=None, allow_all_origin: bool=True, timezone: timezone=timezone.utc, chunk_size: int=1024 * 1024,
+              max_concurrent_connections: int=200, request_timeout_seconds: int=30, max_auth_failures: int=10, auth_lockout_seconds: int=300) -> None:
+        """
+        max_concurrent_connections: hard cap on simultaneous client connections (<= 0: unlimited).
+        request_timeout_seconds: socket timeout while reading a request (slowloris protection, <= 0: none).
+        max_auth_failures / auth_lockout_seconds: a client IP is locked out for auth_lockout_seconds after
+            max_auth_failures failed logins within that window (<= 0 disables).
+        """
         self.m_bind_addr = bind_addr
         self.m_bind_port = bind_port
         self.m_external_url = external_url
         self.m_timezone = timezone
         self.m_allow_all_origin = allow_all_origin
         self.m_chunk_size = chunk_size
+        self.m_max_concurrent_connections = max_concurrent_connections
+        self.m_request_timeout_seconds = request_timeout_seconds if (request_timeout_seconds and request_timeout_seconds > 0) else None
+        self.m_auth_throttle = _AuthThrottle(max_failures=max_auth_failures, lockout_seconds=auth_lockout_seconds)
 
     # ------------------------------------------------------------
 

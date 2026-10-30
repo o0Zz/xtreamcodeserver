@@ -10,6 +10,7 @@ from xtreamcodeserver.interfaces.datetimeprovider import IXTreamCodeDateTimeProv
 from xtreamcodeserver.providers.inmemory.entry_provider import XTreamCodeEntryMemoryProvider
 from xtreamcodeserver.providers.inmemory.epg_provider import XTreamCodeEPGMemoryProvider
 from xtreamcodeserver.server import XTreamCodeServer
+from xtreamcodeserver.providers.inmemory.proxy_registry import XTreamCodeProxyMemoryRegistry
 
 class DateTimeProviderTest(IXTreamCodeDateTimeProvider):
     def __init__(self) -> None:
@@ -25,7 +26,7 @@ class TestEPG:
         self.epg_provider = XTreamCodeEPGMemoryProvider()
         self.entry_provider = XTreamCodeEntryMemoryProvider()
         self.datetime_provider = DateTimeProviderTest()
-        self.server = XTreamCodeServer(self.entry_provider, self.epg_provider, None, self.datetime_provider)
+        self.server = XTreamCodeServer(self.entry_provider, self.epg_provider, None, XTreamCodeProxyMemoryRegistry(), self.datetime_provider)
         self.server.setup(bind_port=self.bind_port)
         self.server.start()
         self.test_url = f"http://127.0.0.1:{self.bind_port}"
